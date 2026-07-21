@@ -1,0 +1,651 @@
+import mongoose from 'mongoose';
+import { Booking } from '../booking.model.js';
+import Listing from '../../lender/Listings/listings.model.js';
+import { createPaginationInfo } from '../../../lib/pagination.js';
+import payOutModel from '../../lender/payOut/payOut.model.js';
+import paymentModel from '../../Payment/Booking/payment.model.js';
+import MasterDress from '../../admin/Lisitngs/ReviewandMain Site Listing/masterDressModel.js';
+import { ChatRoom } from '../../message/chatRoom.model.js';
+import promoCodeModel from '../../admin/promoCode/promoCode.model.js';
+import promoCodeUsageModel from '../promoCodeUsage.model.js';
+import { sendEmail } from '../../../lib/resendEmial.js';
+import {
+  bookingCreatedTemplate,
+  bookingCancelledTemplate
+} from '../../../lib/emailTemplates/booking.templates.js';
+import User from '../../auth/auth.model.js';
+import { calculateSlaTimestamps } from '../../../lib/slaCalculator.js';
+
+export const createBookingService = async ({ userId, role, body }) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      masterdressId,
+      rentalStartDate,
+      rentalEndDate,
+      rentalDurationDays,
+      size,
+      color,
+      deliveryMethod,
+      customerNotes,
+      lenderNotes,
+      adminNotes,
+      tryOnRequested,
+      tryOnAllowedByLender,
+      tryOnOutcome,
+      tryOnNotes,
+      selectedLender,
+      promoCode
+    } = body;
+
+    // --- Validate user ---
+    const User = mongoose.model('User');
+    const user = await User.findById(userId).session(session);
+
+    if (!user || (role === 'USER' && !user.kycVerified)) {
+      throw new Error('User KYC not verified or user not found.');
+    }
+
+    // --- Fetch Master Dress ---
+    if (!mongoose.Types.ObjectId.isValid(masterdressId))
+      throw new Error('Invalid MasterDress ID');
+    const masterDress =
+      await MasterDress.findById(masterdressId).session(session);
+    if (!masterDress) throw new Error('Master dress not found');
+
+    // --- Base fees ---
+    const insuranceFee = masterDress.insuranceFee || 0;
+    const shippingFee = deliveryMethod === 'Shipping' ? 14.95 : 0;
+
+    // --- Allocate lender ---
+
+    let allocatedLender = null;
+
+    if (deliveryMethod === 'Pickup' && selectedLender) {
+      const lender = selectedLender[0];
+
+      // --- Check if the lender is allowed for this dress ---
+      if (
+        !masterDress.lenderIds.some(
+          (id) => id.toString() === lender._id.toString()
+        )
+      ) {
+        throw new Error('Selected lender is not listed for this Master Dress.');
+      }
+
+      // --- Find the listing for this lender among the MasterDress listings ---
+      const lenderListing = await Listing.findOne({
+        _id: { $in: masterDress.listingIds },
+        lenderId: new mongoose.Types.ObjectId(lender._id),
+        isActive: true,
+        approvalStatus: 'approved'
+      }).session(session);
+
+      if (!lenderListing)
+        throw new Error(
+          'Selected lender does not have an active approved listing for this dress.'
+        );
+
+      // --- Allocate lender ---
+      allocatedLender = {
+        lenderId: lender._id,
+        email: lender.email,
+        distance: lender.distance,
+        location: lender.location,
+        allocationType: 'LocalPickup',
+        listingId: lenderListing._id,
+        price:
+          rentalDurationDays <= 4
+            ? lenderListing.rentalPrice.fourDays
+            : lenderListing.rentalPrice.eightDays,
+        allocatedAt: new Date()
+      };
+    } else if (deliveryMethod === 'Shipping') {
+      const listings = await Listing.find({
+        _id: { $in: masterDress.listingIds },
+        isActive: true,
+        approvalStatus: 'approved'
+      }).session(session);
+
+      if (!listings.length)
+        throw new Error('No active/approved listings found for shipping.');
+
+      let lowestPriceListing =
+        rentalDurationDays <= 4
+          ? listings.reduce((prev, curr) =>
+            curr.rentalPrice.fourDays < prev.rentalPrice.fourDays
+              ? curr
+              : prev
+          )
+          : listings.reduce((prev, curr) =>
+            curr.rentalPrice.eightDays < prev.rentalPrice.eightDays
+              ? curr
+              : prev
+          );
+
+      allocatedLender = {
+        lenderId: lowestPriceListing.lenderId,
+        listingId: lowestPriceListing._id,
+        email: lowestPriceListing.lenderEmail || '',
+        price:
+          rentalDurationDays <= 4
+            ? lowestPriceListing.rentalPrice.fourDays
+            : lowestPriceListing.rentalPrice.eightDays,
+        allocationType: 'Shipping'
+      };
+    }
+
+    if (!allocatedLender) throw new Error('Failed to allocate lender.');
+
+    // --- Calculate rentalFee & totalAmount ---
+    let rentalFee = masterDress.basePrice;
+    if (rentalDurationDays >= 8) {
+      let multiplier = 1.2; // Default for 800+
+      const basePrice = masterDress.basePrice;
+
+      if (basePrice <= 150) multiplier = 1.7;
+      else if (basePrice <= 300) multiplier = 1.55;
+      else if (basePrice <= 500) multiplier = 1.4;
+      else if (basePrice <= 800) multiplier = 1.3;
+
+      rentalFee = basePrice * multiplier;
+    }
+
+    let totalAmount = rentalFee + insuranceFee + shippingFee;
+
+    // ---------------------------
+    // PROMO CODE VALIDATION + DISCOUNT (ADD HERE)
+    // ---------------------------
+    let discountAmount = 0;
+    let appliedPromo = null;
+
+    if (body.promoCode) {
+      appliedPromo = await promoCodeModel
+        .findOne({
+          code: body.promoCode,
+          isActive: true,
+          expiresAt: { $gte: new Date() }
+        })
+        .session(session);
+
+      if (!appliedPromo) {
+        throw new Error('Invalid or expired promo code.');
+      }
+
+      // OPTIONAL: prevent multiple user usage
+
+      const alreadyUsed = await promoCodeUsageModel
+        .countDocuments({
+          promoCodeId: appliedPromo._id,
+          userId: user._id
+        })
+        .session(session);
+
+      if (appliedPromo.maxUsage && alreadyUsed >= appliedPromo.maxUsage) {
+        throw new Error('Promo code usage limit reached.');
+      }
+
+      // Calculate discount
+      if (appliedPromo.discountType === 'PERCENTAGE') {
+        discountAmount = (totalAmount * appliedPromo.discount) / 100;
+      } else if (appliedPromo.discountType === 'FLAT') {
+        discountAmount = appliedPromo.discount;
+      }
+
+      discountAmount = Math.min(discountAmount, totalAmount);
+
+      totalAmount -= discountAmount;
+    }
+
+    // ---------------------------
+    // LOYALTY DISCOUNT VALIDATION
+    // ---------------------------
+    let loyaltyDiscount = 0;
+    const userTotalSpent = Number(user.totalSpent ?? 0);
+
+    // Only apply if no promo code was used, mirroring frontend rule
+    if (discountAmount === 0) {
+      if (userTotalSpent >= 600 && user.spent600DiscountUsed === false) {
+        loyaltyDiscount = 30;
+      } else if (userTotalSpent >= 300 && user.spent300DiscountUsed === false) {
+        loyaltyDiscount = 20;
+      } else if (user.firstBookingDiscountUsed === false) {
+        loyaltyDiscount = 10;
+      }
+
+      loyaltyDiscount = Math.min(loyaltyDiscount, totalAmount);
+      totalAmount -= loyaltyDiscount;
+    }
+
+    // --- Prepare booking data ---
+    const { slaExpiresAt, slaReminderAt } = calculateSlaTimestamps(rentalStartDate);
+
+    const bookingData = {
+      customer: user._id,
+      masterdressId: masterDress._id,
+      dressName: masterDress.dressName,
+      rentalStartDate,
+      rentalEndDate,
+      rentalDurationDays,
+      size,
+      color: color || masterDress.colors?.[0] || '',
+      deliveryMethod,
+      lenderPrice: allocatedLender.price,
+      rentalFee,
+      insuranceFee,
+      shippingFee,
+      totalAmount,
+      customerNotes: customerNotes || '',
+      lenderNotes: lenderNotes || '',
+      adminNotes: adminNotes || '',
+      lender: allocatedLender.lenderId,
+      listing: allocatedLender.listingId,
+      allocatedLender,
+      slaExpiresAt,
+      slaReminderAt,
+      allocationAttempts: 1,
+      allocationHistory: []
+    };
+
+    // Try-on fields only for Pickup
+    if (deliveryMethod === 'Pickup') {
+      bookingData.tryOnRequested = tryOnRequested || false;
+      bookingData.tryOnAllowedByLender = tryOnAllowedByLender || false;
+      bookingData.tryOnOutcome = tryOnOutcome || 'ProceededWithRental';
+      bookingData.tryOnNotes = tryOnNotes || '';
+    }
+
+    // --- Save booking ---
+    const booking = new Booking(bookingData);
+    await booking.save({ session });
+
+    // Populate customer info
+    await booking.populate([
+      { path: 'customer', select: '-password -refreshToken' }
+    ]);
+
+    if (appliedPromo) {
+      const PromoUsage = mongoose.model('PromoCodeUsage');
+
+      await PromoUsage.create(
+        [
+          {
+            promoCodeId: appliedPromo._id,
+            userId: user._id,
+            bookingId: booking._id,
+            discountApplied: discountAmount
+          }
+        ],
+        { session }
+      );
+
+      // increase usedCount
+      appliedPromo.usedCount += 1;
+      await appliedPromo.save({ session });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return booking;
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
+
+export const getAllBookingsService = async ({
+  page = 1,
+  limit = 10,
+  query = {},
+  role,
+  userId
+}) => {
+  // 1. Build filter object
+  const filterQuery = {};
+
+  if (query.search) filterQuery.search = query.search;
+  if (query.date) filterQuery.date = query.date;
+  if (query.dressId) filterQuery.dressId = query.dressId;
+  if (query.customer) filterQuery.customer = query.customer;
+  if (query.lender) filterQuery.lender = query.lender;
+  // Date range filter
+  if (query.startDate && query.endDate) {
+    filterQuery.createdAt = {
+      $gte: new Date(query.startDate),
+      $lte: new Date(query.endDate)
+    };
+  } else if (query.startDate) {
+    filterQuery.createdAt = { $gte: new Date(query.startDate) };
+  } else if (query.endDate) {
+    filterQuery.createdAt = { $lte: new Date(query.endDate) };
+  }
+
+  // Role filtering
+  if (role === 'USER') filterQuery.customer = userId;
+  else if (role === 'LENDER') filterQuery.lender = userId;
+
+  // 2. Count
+  const totalBookings = await Booking.countDocuments(filterQuery);
+
+  // 3. Fetch bookings
+  const bookings = await Booking.find(filterQuery)
+    .populate([
+      { path: 'customer', select: '-password -refreshToken' },
+      { path: 'lender', select: '-password -refreshToken' },
+      { path: 'listing' }
+    ])
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .lean(); // important
+
+  // ------ ADD CHATROOM DATA HERE -------
+  const bookingIds = bookings.map((b) => b._id);
+
+  const chatRooms = await ChatRoom.find({
+    bookingId: { $in: bookingIds }
+  }).lean();
+
+  const chatRoomMap = {};
+  chatRooms.forEach((cr) => {
+    chatRoomMap[cr.bookingId.toString()] = cr;
+  });
+
+  // merge chatRoom into each booking
+  const bookingsWithChat = bookings.map((b) => ({
+    ...b,
+    chatRoom: chatRoomMap[b._id.toString()] || null
+  }));
+  // --------------------------------------
+
+  // Pagination
+  const paginationInfo = createPaginationInfo(page, limit, totalBookings);
+
+  return { bookings: bookingsWithChat, paginationInfo };
+};
+
+// GET ALL BOOKINGS
+// export const getAllBookingsService = async ({ page = 1, limit = 10, query = {}, role, userId }) => {
+//   // 1. Build filter object with only defined fields
+//   const filterQuery = {};
+
+//   if (query.search) filterQuery.search = query.search;
+//   if (query.date) filterQuery.date = query.date;
+//   if (query.dressId) filterQuery.dressId = query.dressId;
+//   if (query.customer) filterQuery.customer = query.customer;
+//   if (query.lender) filterQuery.lender = query.lender;
+
+//   // 2. Apply role-based restrictions
+//   if (role === "USER") filterQuery.customer = userId;
+//   else if (role === "LENDER") filterQuery.lender = userId;
+//   // ADMIN sees all, no restriction
+
+//   // 3. Count total for pagination
+//   const totalBookings = await Booking.countDocuments(filterQuery);
+
+//   // 4. Fetch bookings with pagination and populated fields
+//   const bookings = await Booking.find(filterQuery)
+//     .populate([
+//       { path: "customer", select: "-password -refreshToken" },
+//       { path: "lender", select: "-password -refreshToken" },
+//       { path: "listing" },
+//     ])
+//     .sort({ createdAt: -1 })
+//     .skip((page - 1) * limit)
+//     .limit(limit);
+
+//   // 5. Pagination info
+//   const paginationInfo = createPaginationInfo(page, limit, totalBookings);
+
+//   return { bookings, paginationInfo };
+// };
+
+// Get booking by ID with role check
+export const getBookingByIdService = async ({ bookingId, userId, role }) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId))
+    throw new Error('Invalid booking ID');
+
+  const booking = await Booking.findById(bookingId).populate([
+    { path: 'customer', select: '-password -refreshToken' },
+    { path: 'lender', select: '-password -refreshToken' },
+    { path: 'listing' },
+    { path: 'masterdressId' }
+  ]);
+
+  if (!booking) throw new Error('Booking not found');
+  return booking;
+};
+
+// GET BOOKINGS FOR LOGGED-IN USER
+export const getUserBookingsService = async (userId) => {
+  if (!mongoose.Types.ObjectId.isValid(userId))
+    throw new Error('Invalid user ID');
+
+  const bookings = await Booking.find({ customer: userId })
+    .populate('lender', '-password -refreshToken')
+    .populate('listing')
+    .sort({ createdAt: -1 });
+
+  return bookings;
+};
+
+// UPDATE BOOKING SERVICE
+export const updateBookingService = async ({
+  bookingId,
+  userId,
+  role,
+  updateData
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId))
+    throw new Error('Invalid booking ID');
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw new Error('Booking not found');
+
+  // // Only allow the user/lender/admin who owns this booking or admin to update
+  // if (role === "USER" && booking.customer.toString() !== userId) {
+  //   throw new Error("Unauthorized: cannot update this booking");
+  // }
+  // if (role === "LENDER" && booking.lender.toString() !== userId) {
+  //   throw new Error("Unauthorized: cannot update this booking");
+  // }
+  // ADMIN can update any booking
+
+  // Recalculate fees if delivery, duration, or promo changes on checkout
+  if (
+    updateData.deliveryMethod !== undefined ||
+    updateData.rentalDurationDays !== undefined ||
+    updateData.promoCode !== undefined
+  ) {
+    const MasterDress = mongoose.model('MasterDress');
+    
+    let rentalFee = booking.rentalFee;
+    let shippingFee = updateData.deliveryMethod === 'Shipping' ? 14.95 : 0;
+    if (updateData.deliveryMethod === 'Pickup') shippingFee = 0;
+    else if (updateData.deliveryMethod === undefined) shippingFee = booking.shippingFee;
+    
+    let insuranceFee = booking.insuranceFee || 0;
+
+    if (updateData.rentalDurationDays && updateData.rentalDurationDays !== booking.rentalDurationDays) {
+      const masterDress = await MasterDress.findById(booking.masterdressId);
+      if (masterDress) {
+        rentalFee = masterDress.basePrice;
+        if (updateData.rentalDurationDays >= 8) {
+          let multiplier = 1.2;
+          if (masterDress.basePrice <= 150) multiplier = 1.7;
+          else if (masterDress.basePrice <= 300) multiplier = 1.55;
+          else if (masterDress.basePrice <= 500) multiplier = 1.4;
+          else if (masterDress.basePrice <= 800) multiplier = 1.3;
+          rentalFee = masterDress.basePrice * multiplier;
+        }
+      }
+    }
+
+    let totalAmount = rentalFee + insuranceFee + shippingFee;
+
+    // Apply promo code discount
+    let codeToApply = updateData.promoCode;
+
+    if (!codeToApply) {
+      const existingUsage = await promoCodeUsageModel.findOne({ bookingId: booking._id }).populate('promoCodeId');
+      if (existingUsage && existingUsage.promoCodeId) {
+        codeToApply = existingUsage.promoCodeId.code;
+      }
+    }
+
+    let finalPromoDiscountAmount = 0;
+
+    if (codeToApply) {
+      const appliedPromo = await promoCodeModel.findOne({
+        code: codeToApply,
+        isActive: true,
+      });
+
+      if (appliedPromo) {
+        if (appliedPromo.discountType === 'PERCENTAGE') {
+          finalPromoDiscountAmount = (totalAmount * appliedPromo.discount) / 100;
+        } else if (appliedPromo.discountType === 'FLAT') {
+          finalPromoDiscountAmount = appliedPromo.discount;
+        }
+        finalPromoDiscountAmount = Math.min(finalPromoDiscountAmount, totalAmount);
+        totalAmount -= finalPromoDiscountAmount;
+      }
+    }
+
+    // ---------------------------
+    // LOYALTY DISCOUNT RECALCULATION
+    // ---------------------------
+    let loyaltyDiscount = 0;
+    
+    // Fetch the user to determine if they're eligible
+    const User = mongoose.model('User');
+    const user = await User.findById(booking.customer);
+
+    if (user && finalPromoDiscountAmount === 0) {
+      const userTotalSpent = Number(user.totalSpent ?? 0);
+      if (userTotalSpent >= 600 && user.spent600DiscountUsed === false) {
+        loyaltyDiscount = 30;
+      } else if (userTotalSpent >= 300 && user.spent300DiscountUsed === false) {
+        loyaltyDiscount = 20;
+      } else if (user.firstBookingDiscountUsed === false) {
+        loyaltyDiscount = 10;
+      }
+
+      loyaltyDiscount = Math.min(loyaltyDiscount, totalAmount);
+      totalAmount -= loyaltyDiscount;
+    }
+
+    updateData.rentalFee = rentalFee;
+    updateData.shippingFee = shippingFee;
+    updateData.totalAmount = totalAmount;
+  }
+
+  // Update all fields (all roles can update their own bookings)
+  Object.assign(booking, updateData);
+
+  await booking.save();
+
+  const populatedBooking = await Booking.findById(booking._id)
+    .populate('customer', '-password -refreshToken')
+    .populate('lender', '-password -refreshToken')
+    .populate('listing');
+
+  return populatedBooking;
+};
+
+// DELETE BOOKING
+export const deleteBookingService = async (bookingId) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId))
+    throw new Error('Invalid booking ID');
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw new Error('Booking not found');
+
+  // Only allow cancellation if booking is not yet accepted by lender
+  if (booking.deliveryStatus !== 'Pending') {
+    throw new Error('Booking cannot be cancelled after lender has accepted');
+  }
+
+  // Mark booking as cancelled by user
+  booking.deliveryStatus = 'CancelledByCustomer';
+  await booking.save();
+
+  // Optional: mark listing as available again
+  const listing = await Listing.findById(booking.listing);
+  if (listing) {
+    listing.status = 'available';
+    await listing.save();
+  }
+
+  return booking;
+};
+
+/**
+ * Fetch payout request by bookingId
+ * @param {String} bookingId
+ * @returns {Object} payout request data
+ */
+export const getPayoutByBookingIdService = async (bookingId) => {
+  if (!bookingId) {
+    throw new Error('Booking ID is required');
+  }
+
+  const payout = await payOutModel.findOne({ bookingId });
+  const payment = await paymentModel.findOne({ bookingId });
+  if (!payment) {
+    throw new Error('No payment found for this booking');
+  }
+
+  if (!payout) {
+    throw new Error('No payout request found for this booking');
+  }
+
+  return { payout, payment };
+};
+
+export const getLenderBookingStatsService = async () => {
+  // Example: Fetch all bookings and payouts regardless of lender
+  const allBookings = await paymentModel.find({ type: 'booking' });
+
+  const totalBookingsCount = allBookings.length;
+  const totalBookingsAmount = allBookings.reduce(
+    (sum, b) => sum + (b.amount || 0),
+    0
+  );
+
+  const paidBookings = allBookings.filter((b) => b.status === 'Paid');
+  const paidBookingCount = paidBookings.length;
+  const paidBookingsAmount = paidBookings.reduce(
+    (sum, b) => sum + (b.amount || 0),
+    0
+  );
+
+  const paidPayouts = await payOutModel.find({ status: 'paid' });
+  const totalProfit = paidPayouts.reduce(
+    (sum, p) => sum + (p.bookingAmount - p.requestedAmount),
+    0
+  );
+
+  return {
+    totalBookingsCount,
+    totalBookingsAmount,
+    paidBookingCount,
+    paidBookingsAmount,
+    totalProfit
+  };
+};
+
+// fetch dress with dress name
+
+export const getMasterDressByNameService = async (dressName) => {
+  // Case-insensitive search
+  const dresses = await MasterDress.find({
+    dressName: { $regex: `^${dressName}$`, $options: 'i' }
+  }).lean();
+
+  return dresses;
+};

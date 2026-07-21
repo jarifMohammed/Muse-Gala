@@ -1,0 +1,234 @@
+/* Unsubscribe Page Styles */
+.unsubscribe-container {
+  --bg-light: #fafafa;
+  --text-dark: #1a1a1a;
+  --text-muted: #666;
+  --border-color: #1a1a1a;
+  --success-color: #10b981;
+  --error-color: #dc2626;
+
+  min-height: 100vh;
+  background-color: var(--bg-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+}
+
+/* Header */
+.unsubscribe-header {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0 3rem;
+}
+
+.unsubscribe-logo {
+  max-width: 300px;
+  height: auto;
+}
+
+/* Main Content */
+.unsubscribe-content {
+  max-width: 500px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 1rem;
+}
+
+/* Title */
+.unsubscribe-title {
+  font-family: var(--font-avenir), sans-serif;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: 10px;
+  text-transform: uppercase;
+  color: var(--text-dark);
+  margin: 0 0 1.5rem;
+}
+
+/* Subtitle */
+.unsubscribe-subtitle {
+  font-family: var(--font-avenir), sans-serif;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: #666;
+  line-height: 1.8;
+  margin-bottom: 3rem;
+}
+
+/* Form */
+.unsubscribe-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 380px;
+}
+
+.unsubscribe-form .email-input-wrapper {
+  width: 100%;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.75rem;
+}
+
+.unsubscribe-form .email-input {
+  width: 100%;
+  padding: 0.5rem 0;
+  font-family: var(--font-avenir), sans-serif;
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: none;
+  background: transparent;
+  color: var(--text-dark);
+  outline: none;
+  text-align: center;
+}
+
+.unsubscribe-form .email-input::placeholder {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Unsubscribe Button */
+.unsubscribe-button {
+  font-family: var(--font-avenir), sans-serif;
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 1rem 2.5rem;
+  background: var(--text-dark);
+  color: var(--bg-light);
+  border: 1px solid var(--text-dark);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unsubscribe-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-dark);
+}
+
+.unsubscribe-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Loading spinner */
+.unsubscribe-form .spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--bg-light);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Status messages */
+.unsubscribe-content .message {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.unsubscribe-content .message.success {
+  color: var(--success-color);
+}
+
+.unsubscribe-content .message.error {
+  color: var(--error-color);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Back Link */
+.unsubscribe-content .back-link-container {
+  margin-top: 4rem;
+  padding: 2rem 0;
+}
+
+.unsubscribe-content .back-link {
+  font-family: var(--font-avenir), sans-serif;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text-dark);
+  text-decoration: none;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: opacity 0.3s ease;
+}
+
+.unsubscribe-content .back-link:hover {
+  opacity: 0.7;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .unsubscribe-container {
+    padding: 1rem;
+  }
+
+  .unsubscribe-header {
+    padding: 1.5rem 0 2rem;
+  }
+
+  .unsubscribe-logo {
+    max-width: 200px;
+  }
+
+  .unsubscribe-title {
+    letter-spacing: 6px;
+  }
+
+  .unsubscribe-subtitle {
+    margin-bottom: 2rem;
+  }
+
+  .unsubscribe-content .back-link-container {
+    margin-top: 3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .unsubscribe-logo {
+    max-width: 150px;
+  }
+
+  .unsubscribe-title {
+    letter-spacing: 4px;
+  }
+
+  .unsubscribe-button {
+    width: 100%;
+    padding: 0.875rem 2rem;
+  }
+}
