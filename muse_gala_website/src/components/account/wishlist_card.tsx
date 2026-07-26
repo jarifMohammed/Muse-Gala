@@ -9,6 +9,7 @@ export interface WishlistItem {
   thumbnail: string
   basePrice: number
   rrpPrice: number
+  slug?: string
 }
 
 interface Props {
@@ -34,7 +35,7 @@ const WishlistCard = ({ item, onRemove }: Props) => {
       )}
 
       {/* CLICKABLE AREA */}
-      <Link href={`/shop/${item._id}`}>
+      <Link href={`/shop/${item.slug || item._id}`}>
         <div className="flex flex-col relative">
           {/* Product Image */}
           <div className="relative aspect-[3/4] mb-5 w-full">

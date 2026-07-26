@@ -54,12 +54,16 @@ export default function ListingReviewModal({
   })
 
   const listing = data?.data
+  const [description, setDescription] = useState<string>('')
 
   useEffect(() => {
     if (listing?.dressName) {
       setDressName(listing.dressName)
     }
-  }, [listing?.dressName])
+    if (listing?.description) {
+      setDescription(listing.description)
+    }
+  }, [listing?.dressName, listing?.description])
 
   // --- Approve/Reject Mutation ---
   const statusMutation = useMutation({
@@ -69,11 +73,13 @@ export default function ListingReviewModal({
         insuranceFee?: number
         reasonsForRejection?: string
         dressName?: string
+        description?: string
       } = { approvalStatus: newStatus }
 
       if (newStatus === 'approved') {
         payload.insuranceFee = insuranceFee
         payload.dressName = dressName
+        payload.description = description
       } else {
         payload.reasonsForRejection = reasonsForRejection
       }
@@ -251,10 +257,10 @@ export default function ListingReviewModal({
               <div>
                 <label className="font-medium">Description</label>
                 <textarea
-                  value={listing.description}
-                  readOnly
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   rows={4}
-                  className="w-full border rounded px-3 py-2 mt-1 bg-transparent"
+                  className="w-full border rounded px-3 py-2 mt-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
 

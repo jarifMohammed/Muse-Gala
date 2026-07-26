@@ -43,7 +43,16 @@ const MasterDressSchema = new Schema(
 MasterDressSchema.pre("save", async function (next) {
   // Generate slug if missing or dressName was modified
   if (!this.slug || this.isModified("dressName")) {
-    this.slug = this.dressName.toLowerCase().replaceAll(" ", "-");
+    let baseSlug = this.dressName.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+    
+    // We will ensure it is unique by checking if it already exists, if so append a random string
+    // This is a basic mitigation. For robust handling, one would use a plugin or more complex logic.
+    const existing = await mongoose.model("MasterDress").findOne({ slug: baseSlug });
+    if (existing && existing._id.toString() !== this._id.toString()) {
+       this.slug = `${baseSlug}-${Math.random().toString(36).substring(2, 8)}`;
+    } else {
+       this.slug = baseSlug;
+    }
   }
 
   // Generate masterDressId if missing

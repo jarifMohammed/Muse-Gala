@@ -48,24 +48,10 @@ export interface SingleProductResponse {
 // ------------------- COMPONENT -------------------
 const ProductDetails = () => {
   const params = useParams()
-  const idOrName = decodeURIComponent(params.id as string)
+  const idOrName = decodeURIComponent((params.slug || params.id) as string)
 
   // ✅ smart API selector
-  const apiUrl = (() => {
-    // MongoDB ObjectId usually 24 chars hex string
-    const isObjectId = /^[0-9a-fA-F]{24}$/.test(idOrName)
-
-    if (isObjectId) {
-      // If it's an ID -> direct param route
-      return `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/admin/master-dress/${idOrName}`
-    } else {
-      // If it's a name -> query search
-      return `${process.env.NEXT_PUBLIC_BACKEND_URL
-        }/api/v1/customer/bookings/search?dressName=${encodeURIComponent(
-          idOrName,
-        )}`
-    }
-  })()
+  const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/admin/master-dress/${idOrName}`
 
   const { data, isLoading } = useQuery<SingleProductResponse>({
     queryKey: ['single-product', idOrName],

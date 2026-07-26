@@ -194,6 +194,7 @@ export const adminUpdateDress = async (listingId, adminData = {}) => {
           basePrice: adminData.basePrice ?? null,
           insuranceFee: adminData.insuranceFee ?? null,
           rrpPrice: adminData.rrpPrice ?? null,
+          content: { description: adminData.description || listing.description || '' },
           shippingDetails: {
             isLocalPickup:
               listing.pickupOption === 'Local' ||
@@ -256,6 +257,10 @@ export const adminUpdateDress = async (listingId, adminData = {}) => {
           masterDress.shippingDetails.flexibilityNotes =
             adminData.flexibilityNotes;
         if (adminData.thumbnail) masterDress.thumbnail = adminData.thumbnail;
+        if (adminData.description) {
+           if (!masterDress.content) masterDress.content = {};
+           masterDress.content.description = adminData.description;
+        }
 
         // Ensure isActive is false during merging as per requirement
         masterDress.isActive = false;
@@ -471,17 +476,30 @@ export const getAllMasterDresses = async (query) => {
 // get master dress by id
 
 export const getMasterDressById = async (id) => {
-  // Try finding by _id first
-  let masterDress = await MasterDress.findById(id)
-    .populate({
-      path: 'lenderIds',
-      select: 'fullName phoneNumber businessAddress instagramHandle'
-    })
-    .lean();
+  let masterDress = null;
+
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    masterDress = await MasterDress.findById(id)
+      .populate({
+        path: 'lenderIds',
+        select: 'fullName phoneNumber businessAddress instagramHandle'
+      })
+      .lean();
+  }
 
   // If not found, try masterDressId
   if (!masterDress) {
     masterDress = await MasterDress.findOne({ masterDressId: id })
+      .populate({
+        path: 'lenderIds',
+        select: 'fullName phoneNumber businessAddress instagramHandle'
+      })
+      .lean();
+  }
+  
+  // If still not found, try slug
+  if (!masterDress) {
+    masterDress = await MasterDress.findOne({ slug: id })
       .populate({
         path: 'lenderIds',
         select: 'fullName phoneNumber businessAddress instagramHandle'

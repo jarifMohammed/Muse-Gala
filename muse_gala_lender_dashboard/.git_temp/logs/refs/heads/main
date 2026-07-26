@@ -1,0 +1,10 @@
+0000000000000000000000000000000000000000 9ea03f7207f42ad3a846e6b0ade7de6ac38ec6f8 jarifMohammed <mohammedjarif@protonmail.com> 1781382350 +0600	clone: from github.com:jarifMohammed/muse_gala_lender_dashboard.git
+9ea03f7207f42ad3a846e6b0ade7de6ac38ec6f8 73c7d4c87c6c67724b2be4ab09ceba9ada4c94ee jarifMohammed <mohammedjarif@protonmail.com> 1784053623 +0600	pull origin main: Fast-forward
+73c7d4c87c6c67724b2be4ab09ceba9ada4c94ee d6eb4751242e791cc55859c3e1986223eb1bf7ab jarifMohammed <mohammedjarif@protonmail.com> 1784069807 +0600	commit: feat: handle payment failure states in booking status UI and improve address display logic in cards
+d6eb4751242e791cc55859c3e1986223eb1bf7ab 54a20c86eec72e2647b0f54ca1ff9a3085e37b16 jarifMohammed <mohammedjarif@protonmail.com> 1784071346 +0600	commit: feat: add payment status handling and retry functionality to booking components
+54a20c86eec72e2647b0f54ca1ff9a3085e37b16 28efb945cc84110e9bdee8a453f5654f2e5e5d5c jarifMohammed <mohammedjarif@protonmail.com> 1784317471 +0600	commit: chore: add .env.local to gitignore and initialize environment variables
+28efb945cc84110e9bdee8a453f5654f2e5e5d5c cff009cec7ddc9b2df063c978c81c04f63a378ff jarifMohammed <mohammedjarif@protonmail.com> 1784317498 +0600	commit: feat: initialize environment variables for backend, auth, storage, and maps integration
+cff009cec7ddc9b2df063c978c81c04f63a378ff 053d3fb7c2836dd16237e883d0b1a700351ee633 jarifMohammed <mohammedjarif@protonmail.com> 1784317696 +0600	commit: chore: Update .gitignore to ignore logs and .env.local
+053d3fb7c2836dd16237e883d0b1a700351ee633 54a20c86eec72e2647b0f54ca1ff9a3085e37b16 jarifMohammed <mohammedjarif@protonmail.com> 1784320861 +0600	reset: moving to origin/main
+54a20c86eec72e2647b0f54ca1ff9a3085e37b16 3c5732acf8b3dacfbe9d4175d75b6139cbf27a14 jarifMohammed <mohammedjarif@protonmail.com> 1784320861 +0600	commit: feat: initialize lender features (secured history)
+3c5732acf8b3dacfbe9d4175d75b6139cbf27a14 dc1af05cf3992b18e835bd3f7b59fd03c5e7f3ce jarifMohammed <mohammedjarif@protonmail.com> 1784661321 +0600	commit: chore: add environment variable template and remove it from gitignore

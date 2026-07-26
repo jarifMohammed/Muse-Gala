@@ -61,7 +61,7 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <div className="flex flex-col h-full">
       <Link
-        href={`/shop/${product._id}`}
+        href={`/shop/${product.slug || product._id}`}
         className="group flex flex-col flex-grow"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

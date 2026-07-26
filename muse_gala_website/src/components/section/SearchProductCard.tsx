@@ -12,7 +12,7 @@ interface SearchProductCardProps {
 export const SearchProductCard = ({ product, onClick }: SearchProductCardProps) => {
     return (
         <Link
-            href={`/shop/${product._id}`}
+            href={`/shop/${product.slug || product._id}`}
             onClick={onClick}
             className="flex items-center gap-4 p-2 hover:bg-gray-50 transition-colors group font-avenir"
         >
