@@ -49,7 +49,7 @@ export const subscriptionPaymentConfirmationTemplate = (
       'Plan': planName,
       'Amount': `$${amount.toFixed(2)} ${currency}`,
       'Payment ID': paymentId,
-      'Invoice Date': invoiceDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      'Invoice Date': invoiceDate.toLocaleDateString('en-AU', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Sydney' }),
     })}
       <p><strong>Next Steps:</strong> Your subscription is now active and you have full access to all premium features. You can manage your subscription settings in your account dashboard at any time.</p>
       <p>Thank you for choosing Muse Gala!</p>
@@ -138,10 +138,11 @@ export const subscriptionExpiringTemplate = (
   daysRemaining,
   expiryDate
 ) => {
-  const formattedExpiry = new Date(expiryDate).toLocaleDateString('en-GB', {
+  const formattedExpiry = new Date(expiryDate).toLocaleDateString('en-AU', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'Australia/Sydney'
   });
 
   return baseEmailTemplate({

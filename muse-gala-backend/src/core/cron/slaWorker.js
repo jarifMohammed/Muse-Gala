@@ -52,7 +52,7 @@ export const initSlaWorker = () => {
                   <h2>Booking Request Expiring Soon</h2>
                   <p>Hi ${lender.firstName || lender.name || 'Lender'},</p>
                   <p>This is a reminder that a booking request for <strong>${masterDress?.dressName || 'a dress'}</strong> is waiting for your response.</p>
-                  <p><strong>Expires At:</strong> ${new Date(booking.slaExpiresAt).toLocaleString()}</p>
+                  <p><strong>Expires At:</strong> ${new Date(booking.slaExpiresAt).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
                   <p>If you do not accept the booking before it expires, it will be automatically sent to another lender.</p>
                   <br/>
                   <p>— Muse Gala Team</p>

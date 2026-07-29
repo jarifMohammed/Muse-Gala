@@ -2,10 +2,11 @@
 import { baseEmailTemplate, createInfoBox } from './baseTemplate.js';
 
 export const promoCodeTemplate = ({ code, expiresAt }) => {
-  const expiry = new Date(expiresAt).toLocaleDateString('en-GB', {
+  const expiry = new Date(expiresAt).toLocaleDateString('en-AU', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'Australia/Sydney'
   });
 
   return baseEmailTemplate({

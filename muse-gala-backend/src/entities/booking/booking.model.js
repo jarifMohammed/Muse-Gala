@@ -388,7 +388,7 @@ BookingSchema.post('save', async function (doc) {
             dress?.colors?.[0] || 'N/A',
             doc.size || 'N/A',
             doc.address || 'N/A',
-            doc.pickupTime ? new Date(doc.pickupTime).toLocaleString() : 'N/A'
+            doc.pickupTime ? new Date(doc.pickupTime).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) : 'N/A'
           ),
         subject: 'Your Dress is Ready for Pickup!'
       },
@@ -402,7 +402,7 @@ BookingSchema.post('save', async function (doc) {
             dress?.colors?.[0] || 'N/A',
             doc.size || 'N/A',
             doc.address || 'N/A',
-            doc.pickupTime ? new Date(doc.pickupTime).toLocaleString() : 'N/A'
+            doc.pickupTime ? new Date(doc.pickupTime).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) : 'N/A'
           ),
         subject: 'Dress Picked Up!'
       },
